@@ -1,0 +1,378 @@
+!DOCTYPE html>
+<html>
+<head>
+  <title>Traffic AI Ultimate</title>
+  <style>
+    body { margin: 0; font-family: Arial; }
+
+    /* 🛣️ ROUTE LINE */
+    .route {
+      position: absolute;
+      height: 5px;
+      background: blue;
+      width: 0;
+      top: 50%;
+      left: 20%;
+      border-radius: 5px;
+      transition: width 1s ease;
+    }
+    .route.primary { background: #10b981; }
+    .route.alternate { background: #f59e0b; top: 60%; left: 10%; opacity: 0.8; }
+
+    /* 🚗 CAR */
+    .car {
+      position: absolute;
+      width: 20px;
+      height: 10px;
+      background: red;
+      border-radius: 3px;
+    }
+
+    /* 📊 LIVE METRICS */
+    .metrics {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 15px;
+      border-radius: 10px;
+      min-width: 180px;
+      font-size: 12px;
+    }
+    .metric { margin: 5px 0; }
+    .metric.high { color: #ff4444; }
+    .metric.medium { color: #ff8800; }
+    .metric.low { color: #10b981; }
+
+    /* 🎬 INTRO SCREEN */
+    #intro {
+      position: fixed;
+      height: 100vh;
+      width: 100%;
+      background: black;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 30px;
+      z-index: 1000;
+      animation: fadeOut 2s 2s forwards;
+    }
+    @keyframes fadeOut {
+      to { opacity: 0; visibility: hidden; }
+    }
+
+    .map-container {
+      height: 100vh;
+      background: url('map.png');
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+
+    /* 📍 PIN */
+    .pin {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: red;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      50% { transform: scale(1.5); }
+    }
+
+    /* 🗺️ LABELS */
+    .label {
+      position: absolute;
+      background: white;
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 5px;
+    }
+
+    /* CARD */
+    .card {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.95);
+      padding: 15px;
+      border-radius: 15px;
+      width: 320px;
+      text-align: center;
+      position: relative;
+    }
+
+    input, button {
+      padding: 8px;
+      margin: 5px;
+      width: 90%;
+      border-radius: 8px;
+    }
+
+    button {
+      background: blue;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    .low    { color: green; }
+    .medium { color: orange; }
+    .high   { color: red; }
+
+    /* GRAPH */
+    .graph {
+      height: 80px;
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-end;
+    }
+
+    .bar {
+      width: 15px;
+      background: blue;
+    }
+
+    /* 🔍 SUGGESTIONS */
+    .suggestions {
+      position: absolute;
+      left: 10%;
+      width: 80%;
+      background: white;
+      border-radius: 8px;
+      z-index: 20;
+      max-height: 120px;
+      overflow-y: auto;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      display: none;
+    }
+    #sourceSuggestions { bottom: 300px; }
+    #destSuggestions { bottom: 220px; }
+    
+    .suggestions div {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .suggestions div:hover {
+      background: #f0f8ff;
+    }
+    .suggestions div:last-child {
+      border-bottom: none;
+    }
+
+    .route-info {
+      background: #f0f8ff;
+      padding: 8px;
+      border-radius: 8px;
+      margin: 5px 0;
+      font-size: 12px;
+      text-align: left;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 🎬 INTRO -->
+  <div id="intro">🚦 Traffic AI Loading...</div>
+
+  <div class="map-container" id="map">
+    <!-- 📊 LIVE METRICS -->
+    <div class="metrics" id="metrics">
+      <div class="metric low">⏱️ Avg Time: --min</div>
+      <div class="metric low">🚦 Signals: 12</div>
+      <div class="metric low">🚗 Vehicles: 47</div>
+      <div class="metric low">🌡️ Congestion: 23%</div>
+    </div>
+
+    <!-- 🛣️ PRIMARY ROUTE -->
+    <div id="primaryRoute" class="route primary"></div>
+    
+    <!-- 🛣️ ALTERNATE ROUTE -->
+    <div id="altRoute" class="route alternate" style="display:none;"></div>
+
+    <!-- 🚗 CAR -->
+    <div id="car" class="car" style="top:50%; left:20%;"></div>
+
+    <!-- 📍 START PIN (GREEN) -->
+    <div id="startPin" class="pin" style="background:#10b981; top:45%; left:20%;"></div>
+    
+    <!-- 📍 END PIN (RED) -->
+    <div id="endPin" class="pin" style="top:50%; left:50%;"></div>
+
+    <!-- 🗺️ REAL KOLKATA PLACE LABELS -->
+    <div class="label" style="top:42%; left:12%;">Park Street Metro</div>
+    <div class="label" style="top:38%; left:8%;">Esplanade Bus Stop</div>
+    <div class="label" style="top:52%; left:18%;">EM Bypass Gate</div>
+    <div class="label" style="top:28%; left:25%;">Salt Lake Sector V</div>
+    <div class="label" style="top:65%; left:45%;">Gariahat</div>
+    <div class="label" style="top:45%; left:40%;">Park Street Mall</div>
+    <div class="label" style="top:55%; left:60%;">Esplanade Shopping</div>
+    <div class="label" style="top:60%; left:30%;">Ruby Bypass</div>
+
+    <div class="card">
+      <h3>🚦 Traffic AI Ultimate</h3>
+
+      <!-- 🚩 STARTING POINT - ALL PLACES AVAILABLE -->
+      <input id="startPoint" placeholder="🗺️ Starting from..." onkeyup="showSourceSuggestions()">
+      <div id="sourceSuggestions" class="suggestions"></div>
+
+      <!-- 🗺️ DESTINATION - ALL PLACES AVAILABLE -->
+      <input id="location" placeholder="Going to..." onkeyup="showDestSuggestions()">
+      <div id="destSuggestions" class="suggestions"></div>
+      
+      <input id="time" type="time">
+      
+      <button onclick="predict()">🚀 Get Route</button>
+      <button onclick="showAlternate()">🔄 Alt Route</button>
+      
+      <div id="output"></div>
+      <div id="routeStats"></div>
+      <div class="graph" id="graph"></div>
+    </div>
+  </div>
+
+  <script>
+    // 📍 ALL KOLKATA PLACES - AVAILABLE FOR BOTH START & DESTINATION
+    const allPlaces = [
+      "park street metro",
+      "esplanade bus stop", 
+      "em bypass gate",
+      "salt lake sector v",
+      "gariahat",
+      "park street mall",
+      "esplanade shopping",
+      "ruby bypass"
+    ];
+    
+    // 📍 POSITION MAP
+    const locations = {
+      "park street metro": {x: 15, y: 42},
+      "esplanade bus stop": {x: 8, y: 38},
+      "em bypass gate": {x: 18, y: 52},
+      "salt lake sector v": {x: 25, y: 28},
+      "gariahat": {x: 45, y: 65},
+      "park street mall": {x: 40, y: 45},
+      "esplanade shopping": {x: 60, y: 55},
+      "ruby bypass": {x: 30, y: 60}
+    };
+
+    // 🔍 STARTING POINT SUGGESTIONS - ALL PLACES
+    function showSourceSuggestions() {
+      let input = document.getElementById("startPoint").value.toLowerCase();
+      let box = document.getElementById("sourceSuggestions");
+      box.innerHTML = "";
+      
+      if (!input.trim()) {
+        box.style.display = "none";
+        return;
+      }
+
+      box.style.display = "block";
+      
+      allPlaces.forEach(place => {
+        if (place.includes(input)) {
+          let div = document.createElement("div");
+          div.innerHTML = `🚩 ${place}`;
+          div.onclick = function() {
+            document.getElementById("startPoint").value = place;
+            box.style.display = "none";
+          };
+          box.appendChild(div);
+        }
+      });
+    }
+
+    // 🔍 DESTINATION SUGGESTIONS - ALL PLACES
+    function showDestSuggestions() {
+      let input = document.getElementById("location").value.toLowerCase();
+      let box = document.getElementById("destSuggestions");
+      box.innerHTML = "";
+      
+      if (!input.trim()) {
+        box.style.display = "none";
+        return;
+      }
+
+      box.style.display = "block";
+      
+      allPlaces.forEach(place => {
+        if (place.includes(input)) {
+          let div = document.createElement("div");
+          div.innerHTML = `➡️ ${place}`;
+          div.onclick = function() {
+            document.getElementById("location").value = place;
+            box.style.display = "none";
+          };
+          box.appendChild(div);
+        }
+      });
+    }
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      let boxes = document.querySelectorAll('.suggestions');
+      let inputs = document.querySelectorAll('#startPoint, #location');
+      
+      boxes.forEach(box => {
+        if (!inputs[0].contains(e.target) && !inputs[1].contains(e.target) && !box.contains(e.target)) {
+          box.style.display = 'none';
+        }
+      });
+    });
+
+    // 🧠 MAIN PREDICTION
+ async function predict() {
+  let startPoint = document.getElementById("startPoint").value.toLowerCase();
+  let location = document.getElementById("location").value.toLowerCase();
+  let time = document.getElementById("time").value;
+
+  if (!startPoint || !location || !time) {
+    alert("Please enter starting point, destination & time");
+    return;
+  }
+
+  // --- NEW: FETCH FROM BACKEND ---
+  const response = await fetch('http://127.0.0.1:5000/predict', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start: startPoint, destination: location, time: time })
+  });
+  const data = await response.json();
+
+  // Update UI using data from Python
+  let colorClass = data.level.toLowerCase();
+  
+  document.getElementById("output").innerHTML = `
+    <span class="${colorClass}">🚗 ${startPoint} → ${location}</span><br>
+    <span class="${colorClass}">📊 Traffic: ${data.level}</span><br>
+    ⏱️ <strong>Average Time: ${data.travel_time_min} mins</strong>`;
+
+  document.getElementById("metrics").innerHTML = `
+    <div class="metric ${colorClass}">⏱️ Avg Time: ${data.travel_time_min}min</div>
+    <div class="metric ${colorClass}">🚦 Signals: ${data.signals}</div>
+    <div class="metric ${colorClass}">🚗 Vehicles: ${data.vehicles}</div>
+    <div class="metric ${colorClass}">🌡️ Congestion: ${data.congestion_percent}%</div>
+  `;
+  
+  // (Keep the Car Movement and Pin logic from your original code below this)
+  updateVisuals(startPoint, location); 
+}
+    // 🔄 SHOW ALTERNATE ROUTE
+    function showAlternate() {
+      let altRoute = document.getElementById("altRoute");
+      altRoute.style.display = "block";
+      altRoute.style.width = "0";
+      setTimeout(() => {
+        altRoute.style.width = "45%";
+      }, 100);
+    }
+  </script>
+</body>
+</html>
